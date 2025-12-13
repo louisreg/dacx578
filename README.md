@@ -1,47 +1,79 @@
-# dac5578 &emsp;
+# dacx578
 
-*Texas Instruments DAC5578 Driver for Rust Embedded HAL*
-This is a driver crate for embedded Rust. It's built on top of the Rust
-[embedded HAL](https://github.com/rust-embedded/embedded-hal)
-It supports sending commands to a TI DAC5578 over I2C.
+[![Crates.io](https://img.shields.io/crates/v/dac5578.svg)](https://crates.io/crates/dac5578)
+[![Docs.rs](https://docs.rs/dac5578/badge.svg)](https://docs.rs/dac5578)
+[![License](https://img.shields.io/crates/l/dac5578.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 
-The driver can be initialized by calling create and passing it an I2C interface.
-The device address (set by ADDR0) also needs to be specified.
-It can be set by pulling the ADDR0 on the device high/low or floating.
+Unified Rust driver for Texas Instruments **DAC5578**, **DAC6578**, and **DAC7578** digital-to-analog converters.
 
+This crate is built on top of the Rust [embedded-hal](https://github.com/rust-embedded/embedded-hal) and provides a single, resolution-aware API for the entire DACx578 family.
+
+## Supported devices
+
+| Device  | Resolution |
+| ------- | ---------- |
+| DAC5578 | 8-bit      |
+| DAC6578 | 10-bit     |
+| DAC7578 | 12-bit     |
+
+## Origin
+
+This crate is **based on the original open-source DAC5578 driver**:
+
+* API documentation: [https://docs.rs/dac5578/](https://docs.rs/dac5578/)
+* GitHub repository: [https://github.com/chmanie/dac5578](https://github.com/chmanie/dac5578)
+* Crates.io: [https://crates.io/crates/dac5578](https://crates.io/crates/dac5578)
+
+The original project provided a clean and minimal driver for the DAC5578.
+
+This codebase extends that work by generalizing the implementation to support the full **DACx578 family** (DAC5578, DAC6578, DAC7578), adding resolution-aware encoding while preserving the original command structure and API philosophy.
+
+## Features
+
+* Supports all 8 output channels (A–H)
+* Resolution-aware value handling (8 / 10 / 12 bits)
+* Write, update, write-and-update, and global update commands
+* Software reset and I2C general-call support
+* `#![no_std]` compatible
+
+## Usage
+
+### Create a driver instance
+
+```rust
+use dacx578::{DACx578, Address, DacResolution};
+use embedded_hal_mock::i2c::Mock;
+
+let i2c = Mock::new(&[]);
+let mut dac = DACx578::new(i2c, Address::PinLow, DacResolution::Bits12);
 ```
-# use embedded_hal_mock::i2c::Mock;
-# use dac5578::*;
-# let mut i2c = Mock::new(&[]);
-let mut dac = DAC5578::new(i2c, Address::PinLow);
+
+### Write to a channel
+
+```rust
+use dacx578::Channel;
+
+// Write a 12-bit value and update channel A
+dac.write_and_update(Channel::A, 0x0FFF).unwrap();
 ```
 
-To set the dac output for channel A:
-```
-# use embedded_hal_mock::i2c::{Mock, Transaction};
-# use dac5578::*;
-# let mut i2c = Mock::new(&[Transaction::write(98, vec![0x40, 0xff, 0xf0]),]);
-# let mut dac = DAC5578::new(i2c, Address::PinLow);
-dac.write_channel(Channel::A, 128);
-```
+The provided value is automatically masked and aligned according to the selected DAC resolution.
 
-## More information
-- [DAC5578 datasheet](https://www.ti.com/lit/ds/symlink/dac5578.pdf?ts=1621340690413&ref_url=https%253A%252F%252Fwww.ti.com%252Fproduct%252FDAC5578)
-- [API documentation](https://docs.rs/dac5578/)
-- [Github repository](https://github.com/chmanie/dac5578)
-- [Crates.io](https://crates.io/crates/dac5578)
+## I2C Addressing
+
+The I2C address is selected via the **ADDR0** pin:
+
+* `PinLow`   → `0x48`
+* `PinHigh`  → `0x4A`
+* `PinFloat` → `0x4C`
+
+## Datasheets
+
+* DAC5578: [https://www.ti.com/product/DAC5578](https://www.ti.com/product/DAC5578)
+* DAC6578: [https://www.ti.com/product/DAC6578](https://www.ti.com/product/DAC6578)
+* DAC7578: [https://www.ti.com/product/DAC7578](https://www.ti.com/product/DAC7578)
 
 ## License
 
-Licensed under either of
-
- * Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
- * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-
-at your option.
-
-### Contribution
-
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any
-additional terms or conditions.
+MIT OR Apache-2.0

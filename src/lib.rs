@@ -1,77 +1,133 @@
-//! *Texas Instruments DAC5578 Driver for Rust Embedded HAL*
-//! This is a driver crate for embedded Rust. It's built on top of the Rust
-//! [embedded HAL](https://github.com/rust-embedded/embedded-hal)
-//! It supports sending commands to a TI DAC5578 over I2C.
+//! *Texas Instruments DAC5578 / DAC6578 / DAC7578 Driver for Rust Embedded HAL*
 //!
-//! The driver can be initialized by calling create and passing it an I2C interface.
-//! The device address (set by ADDR0) also needs to be specified.
-//! It can be set by pulling the ADDR0 on the device high/low or floating.
+//! This crate provides a unified driver for the TI **DACx578** family:
+//! - **DAC5578** (8-bit resolution)
+//! - **DAC6578** (10-bit resolution)
+//! - **DAC7578** (12-bit resolution)
+//!
+//! The driver is built on top of the Rust
+//! [embedded HAL](https://github.com/rust-embedded/embedded-hal)
+//! and allows sending commands to any DACx578 device over I2C.
+//!
+//! ## Origin of this crate
+//! This driver is **based on the original open-source DAC5578 driver**:
+//! - API documentation: <https://docs.rs/dac5578/>
+//! - GitHub repository: <https://github.com/chmanie/dac5578>
+//! - Crates.io: <https://crates.io/crates/dac5578>
+//!
+//! The original project provided a clean and minimal driver for the DAC5578.
+//! This crate extends that work by generalizing the implementation to support
+//! the full **DACx578 family**, introducing resolution-aware encoding while
+//! preserving the original command structure and API philosophy.
+//!
+//! # Initialization
+//! To initialize the driver, create an instance of [`DACx578`] by providing:
+//! - an I2C interface,
+//! - the I2C device address (configured using the ADDR0 pin),
+//! - the device resolution (8, 10, or 12 bits depending on the DAC model).
 //!
 //! ```
 //! # use embedded_hal_mock::i2c::Mock;
-//! # use dac5578::*;
-//! # let mut i2c = Mock::new(&[]);
-//! let mut dac = DAC5578::new(i2c, Address::PinLow);
+//! # use dacx578::*;
+//! # let i2c = Mock::new(&[]);
+//! let mut dac = DACx578::new(i2c, Address::PinLow, DacResolution::Bits12);
 //! ```
 //!
-//! To set the dac output for channel A:
+//! # Writing to a Channel
+//! To set the DAC output value of channel A:
+//!
 //! ```
 //! # use embedded_hal_mock::i2c::{Mock, Transaction};
-//! # use dac5578::*;
-//! # let mut i2c = Mock::new(&[Transaction::write(98, vec![0x40, 0xff, 0xf0]),]);
-//! # let mut dac = DAC5578::new(i2c, Address::PinLow);
-//! dac.write_channel(Channel::A, 128);
+//! # use dacx578::*;
+//! # let i2c = Mock::new(&[
+//! #     Transaction::write(0x48, vec![0x30, 0x0F, 0xF0])
+//! # ]);
+//! let mut dac = DACx578::new(i2c, Address::PinLow, DacResolution::Bits12);
+//!
+//! // Write a 12-bit value to channel A and update the output
+//! dac.write_and_update(Channel::A, 0x0FF0).unwrap();
 //! ```
 //!
-//! ## More information
-//! - [DAC5578 datasheet](https://www.ti.com/lit/ds/symlink/dac5578.pdf?ts=1621340690413&ref_url=https%253A%252F%252Fwww.ti.com%252Fproduct%252FDAC5578)
-//! - [API documentation](https://docs.rs/dac5578/)
-//! - [Github repository](https://github.com/chmanie/dac5578)
-//! - [Crates.io](https://crates.io/crates/dac5578)
+//! The provided value is automatically masked and aligned to match the selected
+//! resolution (8, 10, or 12 bits).
 //!
-#![no_std]
+//! # I2C Addressing
+//! The I2C address is selected via the **ADDR0** pin:
+//! - `PinLow`   → `0x48`
+//! - `PinHigh`  → `0x4A`
+//! - `PinFloat` → `0x4C`
+//!
+//! # More information
+//! - DAC5578 datasheet: <https://www.ti.com/product/DAC5578>
+//! - DAC6578 datasheet: <https://www.ti.com/product/DAC6578>
+//! - DAC7578 datasheet: <https://www.ti.com/product/DAC7578>
+//!
+
+#![cfg_attr(not(test), no_std)]
 #![warn(missing_debug_implementations, missing_docs)]
 
 use core::fmt::Debug;
-use embedded_hal::blocking::i2c::{Read, Write};
+use embedded_hal::i2c::I2c;
 
-/// user_address can be set by pulling the ADDR0 pin high/low or leave it floating
+/// Supported DAC resolutions.
+///
+/// This determines how input values are masked and aligned before being sent
+/// to the DAC.
+#[derive(Debug, Clone, Copy)]
+pub enum DacResolution {
+    /// 8-bit resolution (DAC5578)
+    Bits8,
+    /// 10-bit resolution (DAC6578)
+    Bits10,
+    /// 12-bit resolution (DAC7578)
+    Bits12,
+}
+
+/// ADDR0 pin configuration defining the I2C base address.
+///
+/// The address is selected via the physical state of the ADDR0 pin.
 #[derive(Debug)]
 #[repr(u8)]
 pub enum Address {
-    /// ADDR0 is low
+    /// ADDR0 pin tied to GND
     PinLow = 0x48,
-    /// ADDR0 is high
-    PinHigh = 0x4a,
-    /// ADDR0 is floating
-    PinFloat = 0x4c,
+    /// ADDR0 pin tied to VDD
+    PinHigh = 0x4A,
+    /// ADDR0 pin left floating
+    PinFloat = 0x4C,
 }
 
-/// Defines the output channel to set the voltage for
+/// DAC output channel selection.
+///
+/// The DACx578 family provides 8 output channels.
 #[derive(Debug)]
 #[repr(u8)]
 pub enum Channel {
     /// DAC output channel A
-    A,
+    A = 0,
     /// DAC output channel B
-    B,
+    B = 1,
     /// DAC output channel C
-    C,
+    C = 2,
     /// DAC output channel D
-    D,
+    D = 3,
     /// DAC output channel E
-    E,
+    E = 4,
     /// DAC output channel F
-    F,
+    F = 5,
     /// DAC output channel G
-    G,
+    G = 6,
     /// DAC output channel H
-    H,
-    /// Targets all DAC output channels
-    All = 0xf,
+    H = 7,
+    /// Target all DAC channels
+    All = 0x0F,
 }
 
 impl From<u8> for Channel {
+    /// Convert a numeric channel index (0–7) into a [`Channel`].
+    ///
+    /// # Panics
+    /// Panics if the index is outside the valid range.
     fn from(index: u8) -> Self {
         match index {
             0 => Channel::A,
@@ -82,112 +138,255 @@ impl From<u8> for Channel {
             5 => Channel::F,
             6 => Channel::G,
             7 => Channel::H,
-            _ => panic!("Unkown channel number {}", index),
+            _ => panic!("Invalid channel index {}", index),
         }
     }
 }
 
-/// The type of the command to send for a Command
+/// DAC command type.
+///
+/// These values map directly to the DACx578 command format.
 #[derive(Debug)]
 #[repr(u8)]
 pub enum CommandType {
-    /// Write to the channel's DAC input register
-    WriteToChannel = 0x0,
-    /// Selects DAC channel to be updated
+    /// Write to the DAC input register only
+    WriteToChannel = 0x00,
+    /// Update the DAC output register only
     UpdateChannel = 0x10,
-    /// Write to DAC input register for a channel and update channel DAC register
-    WriteToChannelAndUpdate = 0x30,
-    /// Write to Selected DAC Input Register and Update All DAC Registers (Global Software LDAC)
-    WriteToChannelAndUpdateAll = 0x20,
+    /// Write to input register and update the output
+    WriteAndUpdate = 0x30,
+    /// Write to input register and update all outputs (global LDAC)
+    WriteAndUpdateAll = 0x20,
 }
 
-/// Two bit flags indicating the reset mode for the DAC5578
+/// Software reset mode.
 #[derive(Debug)]
 #[repr(u8)]
 pub enum ResetMode {
-    /// Software reset (default). Same as power-on reset (POR).
+    /// Power-on reset (default behavior)
     Por = 0b00,
-    /// Software reset that sets device into High-Speed mode
+    /// Reset and force high-speed mode
     SetHighSpeed = 0b01,
-    /// Software reset that maintains High-Speed mode state
+    /// Reset while preserving high-speed mode
     MaintainHighSpeed = 0b10,
 }
 
-/// DAC5578 driver. Wraps an I2C port to send commands to a DAC5578
+/// Universal DACx578 driver.
+///
+/// This struct wraps an I2C interface and provides high-level access
+/// to the DAC5578, DAC6578, and DAC7578 devices.
 #[derive(Debug)]
-pub struct DAC5578<I2C>
+pub struct DACx578<I2C>
 where
-    I2C: Read + Write,
+    I2C: I2c,
 {
     i2c: I2C,
+    resolution: DacResolution,
     address: u8,
 }
 
-impl<I2C, E> DAC5578<I2C>
+impl<I2C> DACx578<I2C>
 where
-    I2C: Read<Error = E> + Write<Error = E>,
+    I2C: I2c,
 {
-    /// Construct a new DAC5578 driver instance.
-    /// i2c is the initialized i2c driver port to use, address depends on the state of the ADDR0 pin (see [`Address`])
-    pub fn new(i2c: I2C, address: Address) -> Self {
-        DAC5578 {
+    /// Create a new DACx578 driver instance.
+    ///
+    /// # Arguments
+    /// * `i2c` – Initialized I2C peripheral
+    /// * `address` – I2C address selected via ADDR0 pin
+    /// * `resolution` – DAC resolution (8, 10, or 12 bits)
+    pub fn new(i2c: I2C, address: Address, resolution: DacResolution) -> Self {
+        DACx578 {
             i2c,
+            resolution,
             address: address as u8,
         }
     }
 
-    /// Write to the channel's DAC input register
-    pub fn write(&mut self, channel: Channel, data: u8) -> Result<(), E> {
-        let bytes = Self::encode_command(CommandType::WriteToChannel, channel as u8, data);
-        self.i2c.write(self.address, &bytes)
+    /// Write a value to the DAC input register.
+    ///
+    /// This does **not** update the analog output until an update command
+    /// is issued.
+    ///
+    /// The input value is automatically masked to the selected resolution.
+    pub fn write(&mut self, channel: Channel, value: u16) -> Result<(), I2C::Error> {
+        let bytes = self.encode(CommandType::WriteAndUpdate, channel, value);
+        self.i2c.write(self.address, &bytes)?;
+        Ok(())
     }
 
-    /// Selects DAC channel to be updated
-    pub fn update(&mut self, channel: Channel, data: u8) -> Result<(), E> {
-        let bytes = Self::encode_command(CommandType::UpdateChannel, channel as u8, data);
-        self.i2c.write(self.address, &bytes)
+    /// Update the DAC output register.
+    ///
+    /// This command transfers the value from the input register
+    /// to the analog output.
+    pub fn update(&mut self, channel: Channel, value: u16) -> Result<(), I2C::Error> {
+        let bytes = self.encode(CommandType::UpdateChannel, channel, value);
+        self.i2c.write(self.address, &bytes)?;
+        Ok(())
     }
 
-    /// Write to DAC input register for a channel and update channel DAC register
-    pub fn write_and_update(&mut self, channel: Channel, data: u8) -> Result<(), E> {
-        let bytes = Self::encode_command(CommandType::WriteToChannelAndUpdate, channel as u8, data);
-        self.i2c.write(self.address, &bytes)
+    /// Write to the input register and immediately update the output.
+    ///
+    /// This is the most commonly used operation.
+    pub fn write_and_update(&mut self, channel: Channel, value: u16) -> Result<(), I2C::Error> {
+        let bytes = self.encode(CommandType::WriteAndUpdate, channel, value);
+        self.i2c.write(self.address, &bytes)?;
+        Ok(())
     }
 
-    /// Write to Selected DAC Input Register and Update All DAC Registers (Global Software LDAC)
-    pub fn write_and_update_all(&mut self, channel: Channel, data: u8) -> Result<(), E> {
-        let bytes =
-            Self::encode_command(CommandType::WriteToChannelAndUpdateAll, channel as u8, data);
-        self.i2c.write(self.address, &bytes)
+    /// Write to the input register and update all DAC outputs.
+    ///
+    /// This acts as a software global LDAC.
+    pub fn write_and_update_all(&mut self, channel: Channel, value: u16) -> Result<(), I2C::Error> {
+        let bytes = self.encode(CommandType::WriteAndUpdateAll, channel, value);
+        self.i2c.write(self.address, &bytes)?;
+        Ok(())
     }
 
-    /// Perform a software reset using the selected mode
-    pub fn reset(&mut self, mode: ResetMode) -> Result<(), E> {
+    /// Perform a software reset of the DAC.
+    ///
+    /// The reset behavior depends on the selected [`ResetMode`].
+    pub fn reset(&mut self, mode: ResetMode) -> Result<(), I2C::Error> {
         let bytes = [0x70, mode as u8, 0];
-        self.i2c.write(self.address, &bytes)
-    }
-
-    /// Send a wake-up command over the I2C bus.
-    /// WARNING: This is a general call command and can wake-up other devices on the bus as well.
-    pub fn wake_up_all(&mut self) -> Result<(), E> {
-        self.i2c.write(0x00, &[0x06u8])?;
+        self.i2c.write(self.address, &bytes)?;
         Ok(())
     }
 
-    /// Send a reset command on the I2C bus.
-    /// WARNING: This is a general call command and can reset other devices on the bus as well.
-    pub fn reset_all(&mut self) -> Result<(), E> {
-        self.i2c.write(0x00, &[0x09u8])?;
+    /// Send a general-call wake-up command.
+    ///
+    /// ⚠️ This command affects **all devices** on the I2C bus
+    /// that support the general-call address.
+    pub fn wake_up_all(&mut self) -> Result<(), I2C::Error> {
+        self.i2c.write(0x00, &[0x06])?;
         Ok(())
     }
 
-    /// Destroy the DAC5578 driver, return the wrapped I2C
+    /// Send a general-call reset command.
+    ///
+    /// ⚠️ This command resets **all devices** on the I2C bus
+    /// that support the general-call address.
+    pub fn reset_all(&mut self) -> Result<(),  I2C::Error> {
+        self.i2c.write(0x00, &[0x09])?;
+        Ok(())
+    }
+
+    /// Destroy the driver and return the wrapped I2C interface.
     pub fn destroy(self) -> I2C {
         self.i2c
     }
 
-    /// Encode command type, channel and data into a three byte command
-    fn encode_command(command: CommandType, access: u8, msdb: u8) -> [u8; 3] {
-        [command as u8 | access, msdb, 0]
+    /// Encode a DAC command according to the selected resolution.
+    ///
+    /// This method handles value masking, bit alignment, and byte formatting
+    /// according to the DACx578 datasheet.
+    fn encode(&self, cmd: CommandType, channel: Channel, value: u16) -> [u8; 3] {
+        let access = channel as u8;
+
+        // Clamp to resolution
+        let clamped = match self.resolution {
+            DacResolution::Bits8 => value.min(0xFF),
+            DacResolution::Bits10 => value.min(0x03FF),
+            DacResolution::Bits12 => value.min(0x0FFF),
+        };
+
+        // Encode to two bytes
+        let v = match self.resolution {
+            DacResolution::Bits8  => clamped << 8,
+            DacResolution::Bits10 => clamped << 6,
+            DacResolution::Bits12 => clamped << 4,
+        };
+
+        let msb = (v >> 8) as u8;
+        let lsb = (v & 0xFF) as u8;
+
+        [cmd as u8 | access, msb, lsb]
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use embedded_hal_mock::eh1::i2c::{Mock as I2cMock, Transaction as I2cTransaction};
+
+    #[test]
+    fn write_8bit_encoding() {
+        let expectations = [
+            // 8-bit max value 0xFF → << 8 → MSB=0xFF, LSB=0x00
+            I2cTransaction::write(0x48, vec![0x30, 0xFF, 0x00]),
+        ];
+
+        let i2c = I2cMock::new(&expectations);
+        let mut dac = DACx578::new(i2c, Address::PinLow, DacResolution::Bits8);
+
+        dac.write_and_update(Channel::A, 0xFF).unwrap();
+        dac.destroy().done();
+    }
+
+    #[test]
+    fn write_10bit_encoding() {
+        let expectations = [
+            // 10-bit max value 0x3FF → << 6 → MSB=0xFF, LSB=0xC0
+            I2cTransaction::write(0x4A, vec![0x31, 0xFF, 0xC0]),
+        ];
+
+        let i2c = I2cMock::new(&expectations);
+        let mut dac = DACx578::new(i2c, Address::PinHigh, DacResolution::Bits10);
+
+        dac.write_and_update(Channel::B, 0x03FF).unwrap();
+        dac.destroy().done();
+    }
+
+    #[test]
+    fn write_12bit_encoding() {
+        let expectations = [
+            // 12-bit value 0x0FF0 → << 4 → MSB=0xFF, LSB=0x00
+            I2cTransaction::write(0x4C, vec![0x32, 0xFF, 0x00]),
+        ];
+
+        let i2c = I2cMock::new(&expectations);
+        let mut dac = DACx578::new(i2c, Address::PinFloat, DacResolution::Bits12);
+
+        dac.write_and_update(Channel::C, 0x0FF0).unwrap();
+        dac.destroy().done();
+    }
+
+    #[test]
+    fn value_is_clamped_to_resolution() {
+        let expectations = [
+            // 0x1FF clamped to 8-bit max 0xFF → << 8 → MSB=0xFF, LSB=0x00
+            I2cTransaction::write(0x48, vec![0x30, 0xFF, 0x00]),
+        ];
+
+        let i2c = I2cMock::new(&expectations);
+        let mut dac = DACx578::new(i2c, Address::PinLow, DacResolution::Bits8);
+
+        dac.write_and_update(Channel::A, 0x1FF).unwrap();
+        dac.destroy().done();
+    }
+
+    #[test]
+    fn global_update_all_channels() {
+        let expectations = [
+            // 12-bit value 0x0800 → << 4 → MSB=0x08, LSB=0x00
+            I2cTransaction::write(0x48, vec![0x2F, 0x80, 0x00]),
+        ];
+
+        let i2c = I2cMock::new(&expectations);
+        let mut dac = DACx578::new(i2c, Address::PinLow, DacResolution::Bits12);
+
+        dac.write_and_update_all(Channel::All, 0x0800).unwrap();
+        dac.destroy().done();
+    }
+
+    #[test]
+    fn software_reset_command() {
+        let expectations = [
+            I2cTransaction::write(0x48, vec![0x70, 0x01, 0x00]),
+        ];
+
+        let i2c = I2cMock::new(&expectations);
+        let mut dac = DACx578::new(i2c, Address::PinLow, DacResolution::Bits12);
+
+        dac.reset(ResetMode::SetHighSpeed).unwrap();
+        dac.destroy().done();
     }
 }

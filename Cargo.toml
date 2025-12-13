@@ -1,18 +1,26 @@
 [package]
 name = "dac5578"
-version = "0.2.1"
-edition = "2018"
-
-authors = ["Christian Maniewski <code@chmanie.com>"]
-license = "MIT/Apache-2.0"
-description = "Texas Instruments DAC5578 Driver for Rust Embedded HAL"
-repository = "https://github.com/chmanie/dac5578"
-categories = ["no-std", "embedded"]
-keywords = ["dac", "i2c"]
+version = "0.0.1"
+edition = "2021"
+authors = ["Louis Regnacq <l.regnacq@gmail.com>"]
+description = "Texas Instruments DACx578 Driver for Rust Embedded HAL"
+repository = "https://github.com/louisreg/dacx578"
 readme = "README.md"
+keywords = ["dac", "i2c", "embedded", "no-std"]
+categories = ["embedded", "device-drivers", "no-std"]
+license = "MIT OR Apache-2.0"
+license-file = "LICENSE"
 
 [dependencies]
-embedded-hal = "0.2.5"
+embedded-hal = "1.0.0"
 
 [dev-dependencies]
-embedded-hal-mock = "0.7.2"
+embedded-hal-mock = "0.11.1"
+
+[features]
+# no_std support
+default = ["std"]
+std = []
+
+[package.metadata.docs.rs]
+all-features = true
