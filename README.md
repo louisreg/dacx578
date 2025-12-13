@@ -1,8 +1,8 @@
 # dacx578
 
-[![Crates.io](https://img.shields.io/crates/v/dac5578.svg)](https://crates.io/crates/dac5578)
-[![Docs.rs](https://docs.rs/dac5578/badge.svg)](https://docs.rs/dac5578)
-[![License](https://img.shields.io/crates/l/dac5578.svg)](LICENSE)
+[![Crates.io](https://img.shields.io/crates/v/dacx578.svg)](https://crates.io/crates/dacx578)
+[![Docs.rs](https://docs.rs/dacx578/badge.svg)](https://docs.rs/dacx578)
+[![License](https://img.shields.io/crates/l/dacx578.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 
 Unified Rust driver for Texas Instruments **DAC5578**, **DAC6578**, and **DAC7578** digital-to-analog converters.
