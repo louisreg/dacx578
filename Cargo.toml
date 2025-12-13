@@ -7,7 +7,7 @@ description = "Texas Instruments DACx578 Driver for Rust Embedded HAL"
 repository = "https://github.com/louisreg/dacx578"
 readme = "README.md"
 keywords = ["dac", "i2c", "embedded", "no-std"]
-categories = ["embedded", "device-drivers", "no-std"]
+categories = ["embedded", "no-std", "drivers"]
 license = "MIT OR Apache-2.0"
 license-file = "LICENSE"
 

@@ -29,6 +29,8 @@ The original project provided a clean and minimal driver for the DAC5578.
 
 This codebase extends that work by generalizing the implementation to support the full **DACx578 family** (DAC5578, DAC6578, DAC7578), adding resolution-aware encoding while preserving the original command structure and API philosophy.
 
+> **Note:** This driver has been **tested on the DAC6578**. The DAC5578 and DAC7578 are expected to behave similarly based on the original DAC5578 driver and datasheet, but the code has not been fully tested on these devices.
+
 ## Features
 
 * Supports all 8 output channels (A–H)
@@ -73,6 +75,13 @@ The I2C address is selected via the **ADDR0** pin:
 * DAC5578: [https://www.ti.com/product/DAC5578](https://www.ti.com/product/DAC5578)
 * DAC6578: [https://www.ti.com/product/DAC6578](https://www.ti.com/product/DAC6578)
 * DAC7578: [https://www.ti.com/product/DAC7578](https://www.ti.com/product/DAC7578)
+  
+## Possible Improvements
+
+* Provide an **async** version for non-blocking I2C operations
+* Support for the reference voltage (`Vref`) to allow writing values directly in volts
+* Add an API to read DAC internal registers or status
+* Expand testing to cover DAC5578 and DAC7578 for full compatibility
 
 ## License
 
