@@ -19,6 +19,7 @@ panic-halt = "1.0.0"
 panic-probe = { version = "1.0.0", features = ["print-defmt"], optional = true }
 dacx578 = { path = "../../" } 
 embedded-hal = "1.0.0"
+embedded-hal-bus = "0.3.0"
 
 [[bin]]
 name = "demo_stm32f103_embassy"

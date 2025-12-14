@@ -11,11 +11,15 @@ use {defmt_rtt as _, panic_probe as _};
 use embassy_executor::Spawner;
 use embassy_stm32::gpio::{Level, Output, Speed};
 use embassy_stm32::time::Hertz;
-use embassy_time::{Duration, Timer};
+use embassy_time::Duration;
 use fmt::info;
-use embassy_stm32::i2c::{Error, I2c};
+use embassy_stm32::i2c::I2c;
 
-use dacx578::{DACx578, Address, Channel, DacResolution};
+// I2C Bus sharing utilities
+use embedded_hal_bus::i2c;
+use embedded_hal_bus::util::AtomicCell;
+
+use dacx578::{DACx578, I2cAddress, AddrPin, DacResolution, Channel};
 
 
 
@@ -41,10 +45,63 @@ async fn main(_spawner: Spawner) {
 
     let p = embassy_stm32::init(config);
 
-    let mut i2c1 = I2c::new_blocking(p.I2C1, p.PB6, p.PB7, Default::default());
+    // Initialize I2C1 
+    let i2c1 = I2c::new_blocking(p.I2C1, p.PB6, p.PB7, Default::default());
+    let i2c1_cell = AtomicCell::new(i2c1);
 
-    // Create DAC driver 
-    let mut dac = DACx578::new(i2c1, Address::PinLow, DacResolution::Bits10);
+    // Initialize I2C2
+    let i2c2 = I2c::new_blocking(p.I2C2, p.PB10, p.PB11, Default::default());
+    let i2c2_cell = AtomicCell::new(i2c2);
+
+    let mut dac1 = DACx578::new(
+        i2c::AtomicDevice::new(&i2c1_cell),
+        I2cAddress::DualPin { addr1: AddrPin::Low,  addr0: AddrPin::Low  },
+        DacResolution::Bits10,
+    );
+
+    let mut dac2 = DACx578::new(
+        i2c::AtomicDevice::new(&i2c1_cell),
+        I2cAddress::DualPin { addr1: AddrPin::High, addr0: AddrPin::Low  },
+        DacResolution::Bits10,
+    );
+
+    let mut dac3 = DACx578::new(
+        i2c::AtomicDevice::new(&i2c1_cell),
+        I2cAddress::DualPin { addr1: AddrPin::Low,  addr0: AddrPin::High },
+        DacResolution::Bits10,
+    );
+
+    let mut dac4 = DACx578::new(
+        i2c::AtomicDevice::new(&i2c1_cell),
+        I2cAddress::DualPin { addr1: AddrPin::High, addr0: AddrPin::High },
+        DacResolution::Bits10,
+    );
+
+    let mut dac5 = DACx578::new(
+        i2c::AtomicDevice::new(&i2c2_cell),
+        I2cAddress::DualPin { addr1: AddrPin::Low,  addr0: AddrPin::Low  },
+        DacResolution::Bits10,
+    );
+
+    let mut dac6 = DACx578::new(
+        i2c::AtomicDevice::new(&i2c2_cell),
+        I2cAddress::DualPin { addr1: AddrPin::High, addr0: AddrPin::Low  },
+        DacResolution::Bits10,
+    );
+
+    let mut dac7 = DACx578::new(
+        i2c::AtomicDevice::new(&i2c2_cell),
+        I2cAddress::DualPin { addr1: AddrPin::Low,  addr0: AddrPin::High },
+        DacResolution::Bits10,
+    );
+
+    let mut dac8 = DACx578::new(
+        i2c::AtomicDevice::new(&i2c2_cell),
+        I2cAddress::DualPin { addr1: AddrPin::High, addr0: AddrPin::High },
+        DacResolution::Bits10,
+    );
+
+    
 
     let mut value: u16 = 0;
 
@@ -55,8 +112,17 @@ async fn main(_spawner: Spawner) {
     info!("Hello, World!");
 
     loop {
-        // Write value to channel A
-        dac.write_and_update(Channel::A, value).unwrap();
+        // Write value to all dacs and all channels
+        dac1.write_and_update(Channel::All, value).unwrap();
+        dac2.write_and_update(Channel::All, value).unwrap();
+        dac3.write_and_update(Channel::All, value).unwrap();
+        dac4.write_and_update(Channel::All, value).unwrap();
+
+        dac5.write_and_update(Channel::All, value).unwrap();
+        dac6.write_and_update(Channel::All, value).unwrap();
+        dac7.write_and_update(Channel::All, value).unwrap();
+        dac8.write_and_update(Channel::All, value).unwrap();
+
 
         // Increment value for sawtooth effect
         value = value.wrapping_add(1);
@@ -64,16 +130,10 @@ async fn main(_spawner: Spawner) {
             value = 0;
         }
 
-        let val_in_float = (value as f32) / 1.23 * 0.512;
+        let val_in_float = (value as f32) / 1.023 * 0.512;
         info!("DAC Value: {} (~{} mV)", value, val_in_float);
 
         // Wait 500 ms (async)
         embassy_time::Timer::after(Duration::from_millis(500)).await;
     }
 }
-
-ça a l'air de marcher 
---> TODO plusieurs CHANNELS 
-    --> meme bus different dac 
-    --> sur diffents bus 
-    --> besoin d'update address psq 2 pin et pas une seule (voir datasheet)
