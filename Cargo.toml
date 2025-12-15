@@ -1,6 +1,6 @@
 [package]
 name = "dacx578"
-version = "0.0.2"
+version = "0.1.0"
 edition = "2021"
 authors = ["Louis Regnacq <l.regnacq@gmail.com>"]
 description = "Texas Instruments DACx578 Driver for Rust Embedded HAL"
