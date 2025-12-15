@@ -173,6 +173,7 @@ I2cAddress::DualPin { addr1, addr0 }
 * Support for the reference voltage (`Vref`) to allow writing values directly in volts
 * Add an API to read DAC internal registers or status
 * Expand testing to cover DAC5578 and DAC7578 for full compatibility
+* Add support for the DAC **\CLEAR** and **\LDAC** pins to allow hardware-based reset and synchronized output updates
 
 ## License
 
